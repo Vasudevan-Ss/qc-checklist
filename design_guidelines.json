@@ -1,0 +1,164 @@
+{
+  "app_name": "QC Inspect",
+  "personality": "5 Brutalist Mobile (Light)",
+  "personality_one_liner": "A high-contrast, utility-first industrial command center designed for operational clarity, speed, and glove-friendly operation.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#09090B",
+    "surfaceSecondary": "#F4F4F5",
+    "onSurfaceSecondary": "#18181B",
+    "surfaceTertiary": "#E4E4E7",
+    "onSurfaceTertiary": "#27272A",
+    "surfaceInverse": "#18181B",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#18181B",
+    "brandPrimary": "#18181B",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#52525B",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#E4E4E7",
+    "onBrandTertiary": "#18181B",
+    "success": "#16A34A",
+    "onSuccess": "#FFFFFF",
+    "warning": "#D97706",
+    "onWarning": "#FFFFFF",
+    "error": "#DC2626",
+    "onError": "#FFFFFF",
+    "info": "#2563EB",
+    "onInfo": "#FFFFFF",
+    "border": "#E4E4E7",
+    "borderStrong": "#18181B",
+    "divider": "#E4E4E7"
+  },
+  "typography": {
+    "displayFontFamily": "SpaceGrotesk-Bold",
+    "textFontFamily": "SpaceGrotesk-Medium",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use rigid grids, hard alignment, and visible spacing systems. Generous vertical breathing room for rapid scanning. Forms must use lg padding.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 0,
+    "md": 0,
+    "lg": 0,
+    "pill": 0
+  },
+  "shadow_tier": "0",
+  "navigation": "stack_only",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": false,
+    "do's": [],
+    "dont's": [
+      "No blur on any surface. Use solid surfaceSecondary or borders for structure."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "Solid surfaceSecondary",
+      "android": "Solid surfaceSecondary",
+      "low_end_android_fallback": "Solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "none",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "Secure entry for QC Executives and Admins.",
+      "states": {
+        "loading": "Spinner centrally aligned.",
+        "empty": "N/A",
+        "error": "Banner at top of form with red background."
+      },
+      "layout": "Half-screen hero image of bakery production line with vertical dark gradient scrim. Bottom half is a stark white form with thick 1.5pt border inputs. Huge solid black submit button."
+    },
+    {
+      "name": "Dashboard",
+      "purpose": "Command center showing today's metrics and primary actions.",
+      "states": {
+        "loading": "Skeleton grids for metrics.",
+        "empty": "0 counts on metrics, clear Start Inspection button.",
+        "error": "Error fetching stats with a manual retry button."
+      },
+      "layout": "Grid layout. Top section: Large structural metric blocks (Total, Pass, Fail, Open Actions) with JetBrains Mono numbers. Bordered cards (2pt). Bottom section: Full-width sticky 'Start New Inspection' button at bottom. Quick actions (Product Master, History, Report) as stark list rows with thick dividers."
+    },
+    {
+      "name": "Product Master",
+      "purpose": "Select a product to inspect.",
+      "states": {
+        "loading": "List skeletons.",
+        "empty": "No products found. 'Sync Products' CTA.",
+        "error": "Failed to load products. Retry CTA."
+      },
+      "layout": "Sticky search bar with thick border. List of products. Each row has a left thumbnail (bread loaf), product name in Space Grotesk, and ID in Mono. High-contrast chevron. Minimum row height 64pt for glove-friendly tapping."
+    },
+    {
+      "name": "Batch Entry",
+      "purpose": "Capture production run details before checklist.",
+      "states": {
+        "loading": "Validating batch...",
+        "empty": "Blank form.",
+        "error": "Inline validation errors in signal red."
+      },
+      "layout": "Single column form. Labels above inputs. Huge input fields (56pt height). Sticky 'Start Checklist' button at bottom."
+    },
+    {
+      "name": "Dynamic Checklist",
+      "purpose": "Perform CCP and product quality checks.",
+      "states": {
+        "loading": "Loading checklist structure...",
+        "empty": "No checks configured for this product.",
+        "error": "Failed to save reading (local sync queued)."
+      },
+      "layout": "Top persistent stepper/progress bar. One checklist item per block. Each block has a thick bottom divider. For Pass/Fail: huge segmented controls (side-by-side buttons, turning solid green/red when pressed). Numeric: huge text input with visual inline boundary warnings (e.g., 'Target: 50-60'). Photo: full-width dashed bordered box with camera icon. CCP failures immediately trigger an inline 'Corrective Action' dropdown."
+    },
+    {
+      "name": "Review & Submit",
+      "purpose": "Summarize all checks and confirm before saving.",
+      "states": {
+        "loading": "Compiling report...",
+        "empty": "N/A",
+        "error": "Sync failure, queued locally."
+      },
+      "layout": "Table-like view. Only showing failed items explicitly in red blocks at the top, followed by a collapsed list of passed items. A massive 'Submit Inspection' CTA fixed at the bottom."
+    }
+  ],
+  "images": {
+    "login_hero": {
+      "url": "https://images.unsplash.com/photo-1621954938124-02e637ba3584?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTB8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBpbmR1c3RyaWFsJTIwYmFrZXJ5JTIwcHJvZHVjdGlvbiUyMGxpbmV8ZW58MHx8fHwxNzg3NjMwNzcyfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Modern industrial bakery production line with steel machinery"
+    },
+    "product_thumbnail_fallback": {
+      "url": "https://images.unsplash.com/photo-1693480532308-343b33da48e3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHwxfHxmcmVzaGx5JTIwYmFrZWQlMjBicmVhZCUyMGxvYWYlMjBpc29sYXRlZHxlbnwwfHx8fDE3ODc2MzA3NzN8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Freshly baked bread loaf isolated on white"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the 5 Brutalist Mobile (Light) personality. The app should feel like a piece of factory machinery: stark, high-contrast, and indestructible.",
+    "BORDERS OVER SHADOWS: Use `borderStrong` (2pt #18181B) for focused inputs, active states, and metric cards. No shadows. No rounded corners (radius 0).",
+    "GLOVE-FRIENDLY UI: Minimum touch target size is 56pt. Pass/Fail segmented buttons must be massive (flex: 1, height 64pt) so technicians can tap them without looking closely.",
+    "SEMANTIC COLORS: Use the exact `#16A34A` for PASS and `#DC2626` for FAIL. When a Pass/Fail button is selected, fill it with the solid status color and white text. Unselected should be transparent with a `borderStrong`.",
+    "TYPOGRAPHY: Use `SpaceGrotesk` for all primary UI text. Use `JetBrainsMono` (or any monospace font) for metrics, timestamps, batch numbers, and numeric inputs to reinforce the industrial, data-heavy feel.",
+    "OFFLINE-FIRST AESTHETIC: Show sync status prominently (e.g., 'All changes saved locally' in mono text at the bottom of the dashboard).",
+    "CCP FAILURES: If a Critical Control Point (CCP) fails, trigger a stark, inverted (red background, white text) warning block immediately below the input, forcing the user to select a Corrective Action.",
+    "NO BLUR, NO GLASS: Remove all translucent effects. Sticky headers and bottom CTA containers must have a solid `surface` background with a thick 2pt `borderStrong` separating them from scrolling content."
+  ]
+}
