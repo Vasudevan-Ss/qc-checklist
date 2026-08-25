@@ -1,0 +1,43 @@
+{
+  "summary": "Backend RBAC + admin CRUD fully verified (10/10 pytest passed in /app/backend/tests/test_admin.py). All qc_executive → admin-only endpoints return 403 (create/update product, add/update/delete checklist-item, add/update/delete ccp). include_inactive=1 is admin-only (qc gets active-only). Admin create product auto-creates a v1 active checklist template; items of every param type (numeric with min/max, passfail, yesno, dropdown w/ options, text) persist and reflect in GET /products/{id}/checklist. Add/edit/delete CCP with critical limits persists correctly. Duplicate product_code returns 409. Missing item/ccp updates+deletes return 404. Frontend admin UI: qc@qc.com does NOT see ADMIN section on dashboard ✓. admin@qc.com sees ADMIN → Manage Products; Manage Products lists all products (including INACTIVE) with EDIT + CHECKLIST + ADD PRODUCT buttons; Add Product form creates the product and lands back in the list; Checklist Builder opens; CCP modal adds a CCP successfully (verified in-list + toast). ISSUE FOUND: tapping 'Manage Products' from dashboard navigates to /products (Select Product for inspection) instead of /admin/products because the sticky bottom CTA 'START NEW INSPECTION' (position:absolute) overlaps the ADMIN action row — the tap goes to the CTA underneath. Direct navigation to /admin/products works and every downstream screen works. Also minor: on 390x844, the parameter/CCP modal content can extend below the visible area; save button requires an in-modal scroll to reach on some devices.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "dashboard.tsx ADMIN action row", "issue": "Tapping 'Manage Products' navigates to /products instead of /admin/products because the sticky bottom CTA bar (Start New Inspection, position: absolute) overlaps the ADMIN action row after scroll. Repro: login as admin → scroll down to ADMIN section → tap 'Manage Products'. Fix: add extra bottom padding to the ScrollView contentContainerStyle (currently 140 is not enough with ADMIN section), OR move ADMIN section above QUICK ACTIONS, OR position the CTA below the scroll (non-absolute). Reference: /app/frontend/app/dashboard.tsx:96 (paddingBottom: 140) and :237 (ctaBar absolute).", "testID": "admin-manage-products", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "admin/checklist-builder ItemFormModal & CcpFormModal", "issues": ["On 390x844, modal contents (param chips + section + unit + min/max + sequence + toggles + save) require scrolling inside the modal to reach the save button. Modal uses KeyboardAwareScrollView so scrolling works, but the save button is often below the fold. Consider a sticky bottom save button inside the modal, or shorten default content."]}
+    ],
+    "react_native_issues": [
+      {"component": "props.pointerEvents (library-level)", "issue": "Console warning still present from a prior library dependency: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Cosmetic."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin.py",
+    "/app/backend/tests/test_backend.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/admin_results.xml"
+  ],
+  "action_items": [
+    "HIGH: Fix admin nav bug on dashboard — 'Manage Products' tap gets swallowed by the sticky CTA. Recommended: move ADMIN section ABOVE QUICK ACTIONS, or increase ScrollView paddingBottom (currently 140) and/or make the CTA non-absolute so it never overlaps rows. See /app/frontend/app/dashboard.tsx.",
+    "MEDIUM: Make modal save button always reachable on 390x844 — either sticky bottom save inside the modal, or reduce vertical content when type≠numeric/dropdown. See /app/frontend/app/admin/checklist-builder.tsx (ItemFormModal, CcpFormModal).",
+    "LOW: Silence 'props.pointerEvents is deprecated' console warning (library-level, cosmetic)."
+  ],
+  "critical_code_review_comments": [
+    "RBAC dep `require_roles(\"admin\")` correctly applied to all admin endpoints. Verified via 403 tests.",
+    "Product creation properly auto-provisions an active v1 template via _template_for(); duplicate product_code returns 409.",
+    "MongoDB `_id` is excluded on all admin routes (verified via response JSON).",
+    "ProductIn / ChecklistItemIn / CcpIn are Pydantic-validated; PUT endpoints re-write full payload (no partial-update surprises).",
+    "server.py is now ~991 lines — even more reason to split into routers (previous iteration also flagged 840 lines)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10 new admin tests + 22/22 existing)", "frontend": "~85% (all target flows work; navigation-from-dashboard bug requires workaround via direct URL)"},
+  "seed_data_creation": "Created several TEST-prefixed products via admin API + UI (e.g., TEST Cookie, TEST Dup, TEST-fd059d, TEST Cookie v2, TEST Muffin XL, UI633744, etc.). Also added TEST CCPs (CCP-T*) and TEST checklist items on 'Butter Croissant' during UI testing. No cleanup performed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend admin suite: pytest /app/backend/tests/test_admin.py -v. Frontend testIDs for admin: admin-manage-products (dashboard), add-product-button, edit-product-{code}, build-checklist-{code}, field-{key} (product form fields), toggle-active, save-product-button, add-ccp-button, edit-ccp-{id}, delete-ccp-{id}, add-item-button, edit-item-{id}, delete-item-{id}, ccp-number-input, ccp-name-input, save-ccp-button, close-ccp-modal, item-name-input, type-{passfail|numeric|dropdown|text|datetime|photo|yesno}, toggle-required, toggle-photo, save-item-button, close-item-modal. To bypass the dashboard-nav bug during UI testing, navigate directly: https://qc-checklist-hub.preview.emergentagent.com/admin/products.",
+  "rca_of_issue": "Dashboard 'Manage Products' tap → wrong route (/products). Reproduction: login admin@qc.com/Admin@12345 → scroll to ADMIN section → tap 'Manage Products'. Observed navigation goes to /products (Select Product screen). Root cause: /app/frontend/app/dashboard.tsx renders a sticky bottom CTA bar (styles.ctaBar with position:'absolute', bottom:0) containing 'START NEW INSPECTION' which routes to /products. The ScrollView content padding-bottom (140) is not enough once the ADMIN section is added, so admin actions can sit UNDER the CTA. force-clicking the admin row therefore lands on the CTA below it. Fix: (a) increase paddingBottom to ~220 so admin row can clear the CTA, or (b) reorder to put ADMIN section BEFORE QUICK ACTIONS, or (c) render the CTA inside the scroll view (non-absolute)."
+}

@@ -265,8 +265,11 @@ async def me(user: dict = Depends(get_current_user)):
 # Products & checklist
 # ---------------------------------------------------------------------------
 @api_router.get("/products")
-async def list_products(search: Optional[str] = None, user: dict = Depends(get_current_user)):
-    q: Dict[str, Any] = {"active": True}
+async def list_products(search: Optional[str] = None, include_inactive: bool = False,
+                        user: dict = Depends(get_current_user)):
+    q: Dict[str, Any] = {}
+    if not (include_inactive and user["role"] == "admin"):
+        q["active"] = True
     if search:
         q["$or"] = [
             {"product_name": {"$regex": search, "$options": "i"}},
@@ -296,6 +299,151 @@ async def get_checklist(product_id: str, user: dict = Depends(get_current_user))
     ccps = await db.ccps.find(
         {"product_id": product_id, "active": True}, {"_id": 0}).sort("ccp_number", 1).to_list(200)
     return {"template": template, "items": items, "ccps": ccps}
+
+
+# ---------------------------------------------------------------------------
+# Admin: product / checklist / CCP management
+# ---------------------------------------------------------------------------
+class ProductIn(BaseModel):
+    product_code: str
+    product_name: str
+    category: Optional[str] = None
+    description: Optional[str] = None
+    standard_weight: Optional[float] = None
+    weight_tolerance: Optional[float] = None
+    standard_dimensions: Optional[str] = None
+    dimension_tolerance: Optional[float] = None
+    shelf_life: Optional[str] = None
+    storage_condition: Optional[str] = None
+    packaging_type: Optional[str] = None
+    active: bool = True
+
+
+class ChecklistItemIn(BaseModel):
+    parameter_name: str
+    parameter_type: str  # passfail | numeric | dropdown | text | datetime | photo | yesno
+    section: str = "Finished Product"
+    unit: Optional[str] = None
+    minimum_value: Optional[float] = None
+    maximum_value: Optional[float] = None
+    options: Optional[List[str]] = None
+    is_required: bool = True
+    requires_photo: bool = False
+    sequence: int = 0
+
+
+class CcpIn(BaseModel):
+    ccp_number: str
+    name: str
+    process_step: Optional[str] = None
+    hazard: Optional[str] = None
+    critical_limit_min: Optional[float] = None
+    critical_limit_max: Optional[float] = None
+    unit: Optional[str] = None
+    monitoring_frequency: Optional[str] = None
+    corrective_action: Optional[str] = None
+    active: bool = True
+
+
+async def _template_for(product_id: str) -> dict:
+    template = await db.checklist_templates.find_one(
+        {"product_id": product_id, "active": True}, {"_id": 0})
+    if not template:
+        template = {
+            "id": str(uuid.uuid4()), "product_id": product_id,
+            "name": "QC Checklist", "version": 1, "active": True, "created_at": now_iso(),
+        }
+        await db.checklist_templates.insert_one(dict(template))
+    return template
+
+
+@api_router.post("/products")
+async def create_product(data: ProductIn, user: dict = Depends(require_roles("admin"))):
+    existing = await db.products.find_one({"product_code": data.product_code})
+    if existing:
+        raise HTTPException(status_code=409, detail="Product code already exists")
+    product = {"id": str(uuid.uuid4()), **data.dict(), "photo_url": None, "created_at": now_iso()}
+    await db.products.insert_one(dict(product))
+    await _template_for(product["id"])
+    await audit("create", "product", product["id"], user, after={"code": data.product_code})
+    product.pop("_id", None)
+    return product
+
+
+@api_router.put("/products/{product_id}")
+async def update_product(product_id: str, data: ProductIn, user: dict = Depends(require_roles("admin"))):
+    before = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not before:
+        raise HTTPException(status_code=404, detail="Product not found")
+    await db.products.update_one({"id": product_id}, {"$set": data.dict()})
+    await audit("update", "product", product_id, user, before=before, after=data.dict())
+    return await db.products.find_one({"id": product_id}, {"_id": 0})
+
+
+@api_router.post("/products/{product_id}/checklist-items")
+async def add_checklist_item(product_id: str, data: ChecklistItemIn, user: dict = Depends(require_roles("admin"))):
+    product = await db.products.find_one({"id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    template = await _template_for(product_id)
+    item = {
+        "id": str(uuid.uuid4()), "checklist_template_id": template["id"],
+        **data.dict(), "created_at": now_iso(),
+    }
+    await db.checklist_items.insert_one(dict(item))
+    await audit("create", "checklist_item", item["id"], user, after={"name": data.parameter_name})
+    item.pop("_id", None)
+    return item
+
+
+@api_router.put("/checklist-items/{item_id}")
+async def update_checklist_item(item_id: str, data: ChecklistItemIn, user: dict = Depends(require_roles("admin"))):
+    before = await db.checklist_items.find_one({"id": item_id}, {"_id": 0})
+    if not before:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    await db.checklist_items.update_one({"id": item_id}, {"$set": data.dict()})
+    await audit("update", "checklist_item", item_id, user, before=before, after=data.dict())
+    return await db.checklist_items.find_one({"id": item_id}, {"_id": 0})
+
+
+@api_router.delete("/checklist-items/{item_id}")
+async def delete_checklist_item(item_id: str, user: dict = Depends(require_roles("admin"))):
+    res = await db.checklist_items.delete_one({"id": item_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    await audit("delete", "checklist_item", item_id, user)
+    return {"deleted": True}
+
+
+@api_router.post("/products/{product_id}/ccps")
+async def add_ccp(product_id: str, data: CcpIn, user: dict = Depends(require_roles("admin"))):
+    product = await db.products.find_one({"id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    ccp = {"id": str(uuid.uuid4()), "product_id": product_id, **data.dict(), "created_at": now_iso()}
+    await db.ccps.insert_one(dict(ccp))
+    await audit("create", "ccp", ccp["id"], user, after={"name": data.name})
+    ccp.pop("_id", None)
+    return ccp
+
+
+@api_router.put("/ccps/{ccp_id}")
+async def update_ccp(ccp_id: str, data: CcpIn, user: dict = Depends(require_roles("admin"))):
+    before = await db.ccps.find_one({"id": ccp_id}, {"_id": 0})
+    if not before:
+        raise HTTPException(status_code=404, detail="CCP not found")
+    await db.ccps.update_one({"id": ccp_id}, {"$set": data.dict()})
+    await audit("update", "ccp", ccp_id, user, before=before, after=data.dict())
+    return await db.ccps.find_one({"id": ccp_id}, {"_id": 0})
+
+
+@api_router.delete("/ccps/{ccp_id}")
+async def delete_ccp(ccp_id: str, user: dict = Depends(require_roles("admin"))):
+    res = await db.ccps.delete_one({"id": ccp_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="CCP not found")
+    await audit("delete", "ccp", ccp_id, user)
+    return {"deleted": True}
 
 
 # ---------------------------------------------------------------------------

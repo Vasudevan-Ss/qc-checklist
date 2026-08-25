@@ -42,16 +42,17 @@ User agreed to build on this equivalent stack with the same feature set.
 - Dynamic inspection form: all 7 parameter types, live auto Pass/Fail, inline corrective-action block on FAIL.
 - CCP cards with append-only recurring readings + auto-eval + failure warning.
 - Review & Submit screen (fails-first summary, overall result, remarks).
-- Dashboard KPIs (completed, products, passed, failed, checks, open actions) + quick actions.
+- Dashboard KPIs + quick actions; ADMIN-only section for management.
 - History (filter chips) → Inspection Detail (read-only, photo thumbnails, corrective actions).
 - Daily QC Report (production/QC/CCP summaries, product findings, non-conformances) with native Share.
 - Photo capture (camera/library) with full permission handling → Emergent Object Storage.
-- Audit trail collection records create/submit actions.
-- Tested: 22/22 backend pytest + full frontend e2e passed.
+- Audit trail collection records create/update/delete/submit actions.
+- **Admin management (2026-08-25):** admin-only endpoints + screens to create/edit products,
+  build checklists (add/edit/delete parameters of all types), and manage CCPs (limits, frequency).
+  RBAC enforced (qc→403). `include_inactive` listing for admins. Auto-creates checklist template v1.
+- Tested: 22/22 core backend pytest + 10/10 admin backend pytest + frontend e2e (incl. admin) passed.
 
 ## Prioritized Backlog
-### P0 (next)
-- Admin Checklist Builder UI (create/edit products, checklists, CCPs from app) — currently seeded/DB-only.
 ### P1
 - PDF / Excel-CSV export of reports.
 - Offline-first capture + sync queue.

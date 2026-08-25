@@ -43,6 +43,7 @@ export const api = {
   post: <T = any>(p: string, body?: any, auth = true) =>
     request<T>(p, { method: "POST", body, auth }),
   put: <T = any>(p: string, body?: any) => request<T>(p, { method: "PUT", body }),
+  del: <T = any>(p: string) => request<T>(p, { method: "DELETE" }),
 
   async uploadPhoto(uri: string): Promise<string> {
     const token = await getToken();

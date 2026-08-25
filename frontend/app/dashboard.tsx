@@ -74,6 +74,10 @@ export default function Dashboard() {
     { label: "History", icon: "time-outline", to: "/history" },
   ];
 
+  const adminActions = [
+    { label: "Manage Products", icon: "construct-outline", to: "/admin/products" },
+  ];
+
   return (
     <View style={styles.container}>
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
@@ -89,7 +93,7 @@ export default function Dashboard() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: 140 }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: 220 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.userRow}>
@@ -131,6 +135,26 @@ export default function Dashboard() {
             </Pressable>
           ))}
         </View>
+
+        {isAdmin && (
+          <>
+            <Text style={styles.sectionLabel}>ADMIN</Text>
+            <View style={styles.actionList}>
+              {adminActions.map((a) => (
+                <Pressable
+                  key={a.label}
+                  testID={`admin-${a.label.replace(/[^a-z]/gi, "-").toLowerCase()}`}
+                  style={styles.actionRow}
+                  onPress={() => router.push(a.to as any)}
+                >
+                  <Ionicons name={a.icon as any} size={22} color={colors.onSurface} />
+                  <Text style={styles.actionText}>{a.label}</Text>
+                  <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <View style={[styles.ctaBar, { paddingBottom: insets.bottom + spacing.md }]}>
