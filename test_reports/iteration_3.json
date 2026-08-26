@@ -1,0 +1,39 @@
+{
+  "summary": "PDF export feature fully verified end-to-end. Backend: 11/11 pytest passed in /app/backend/tests/test_pdf_export_pytest.py — POST /api/reports/daily/pdf returns {token, filename, share_path='/api/reports/shared/<token>', size_bytes>3000, photo_count, expires_at} for both admin and qc_executive; GET /api/reports/shared/<token> serves application/pdf (magic %PDF), Content-Disposition inline by default and attachment when ?download=1 is supplied; invalid token → 404; /api/reports/exports is properly scoped (qc sees own, admin sees all incl. qc's); photo_count == number of distinct photo_path values across the date's inspections (verified via /api/inspections?date= + /api/inspections/{id}); regression clean — /api/reports/daily still returns full JSON shape with a new 'scope' field ('ALL INSPECTIONS' for admin, contains 'OWN RECORDS' for qc), dashboard stats + inspections list unaffected. Frontend on mobile viewport 390x844: login (data-testid submit-auth-button) → /report; header shows document icon (testID export-pdf-icon) + share icon (testID share-report-button); date shown is 2026-08-26 (which had 1 Ghee Cake inspection with 1 photo); tapping the main EXPORT PDF button (testID export-pdf-button) toggles its label to '' (loading spinner shown by AppButton — original 'GENERATING PDF…' is hidden while loading=true) and then reveals the pdf-ready-card with filename, '…1 photo included · link valid 30 days', full shareable URL, and both testIDs open-pdf-button + share-pdf-link-button. Fetching that URL from the browser context returns 200 application/pdf 90,439 bytes starting with %PDF-1.4. Changing the date via testID date-prev correctly clears the pdf-ready-card. Minor UX nit: when exporting, the AppButton hides the 'GENERATING PDF…' label because AppButton hides children while loading=true; the toast 'PDF sign-off sheet ready' provides sufficient signal but the button appears blank for ~1 s which contradicts the requested visible 'GENERATING PDF…' text.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "report.tsx EXPORT PDF button", "issue": "While exporting, the button label becomes blank instead of showing 'GENERATING PDF…'. AppButton renders only the ActivityIndicator when loading=true (children/title hidden). The title prop is already built as `exporting ? 'GENERATING PDF…' : 'EXPORT PDF SIGN-OFF SHEET'` but AppButton overrides it. Either (a) render the title next to the spinner while loading, or (b) drop `loading={exporting}` and keep the dynamic title so the user sees 'GENERATING PDF…'. Reference: /app/frontend/app/report.tsx:234-240 and /app/frontend/src/components/AppButton.tsx (loading branch).", "testID": "export-pdf-button", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "props.pointerEvents (library-level)", "issue": "Console warning present on every screen load: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Cosmetic — comes from a library dependency, not app code."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pdf_export_pytest.py",
+    "/app/test_reports/pytest/pdf_export_results.xml"
+  ],
+  "action_items": [
+    "LOW/OPTIONAL: In report.tsx, either drop `loading={exporting}` or update AppButton to keep showing the title next to the spinner, so users see 'GENERATING PDF…' rather than a blank button during ~1 s of PDF generation.",
+    "LOW: Suppress library-level 'props.pointerEvents is deprecated' warning if noise-level becomes annoying (cosmetic)."
+  ],
+  "critical_code_review_comments": [
+    "server.py PDF flow correctly uses run_in_threadpool for both PDF build and object storage put/get (no blocking of the event loop).",
+    "Public share endpoint retries object storage read up to 4x with 1.5 s sleep to handle read-after-write delay — matches the observed behaviour of the storage layer.",
+    "share_path already includes the /api prefix; frontend correctly concatenates onto EXPO_PUBLIC_BACKEND_URL without appending to a base that already ends in /api.",
+    "PDF builder (pdf_report.py) escapes user-controlled strings via _p() to avoid ReportLab paragraph XML injection.",
+    "MongoDB `_id` excluded on all export routes (verified in list_exports and inspections responses).",
+    "server.py has grown to ~1092 lines — still worth splitting into routers (auth/products/inspections/reports)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pdf_export_pytest.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11 pdf-export tests)", "frontend": "~95% (all target testIDs work, PDF opens as real PDF; only cosmetic blank-label during generation)"},
+  "seed_data_creation": "No seed data created. Two report_exports rows added to Mongo during testing (one admin, one qc for 2026-08-26); not cleaned up (matches iteration_2 policy).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend PDF tests: `pytest /app/backend/tests/test_pdf_export_pytest.py -v` (relies on 2026-08-26 having 1 Ghee Cake inspection with 1 photo). Frontend flow: login via testIDs email-input / password-input / submit-auth-button, then GET /report (today = 2026-08-26 in this env, so no date navigation needed). Key testIDs on report screen: export-pdf-icon (header), share-report-button (header), date-prev, date-next, export-pdf-button (main CTA), pdf-ready-card, open-pdf-button, share-pdf-link-button, share-report-cta. Verified public PDF URL: https://qc-checklist-hub.preview.emergentagent.com/api/reports/shared/cf9ccaedf41c4df2898040106e7a4853 (90 KB %PDF-1.4).",
+  "rca_of_issue": "N/A — feature works. Only cosmetic nit: while exporting, AppButton shows spinner-only (title hidden) because the shared AppButton component hides its title when loading=true. In report.tsx (line 236) the title is already computed as 'GENERATING PDF…' but never rendered because loading={exporting} takes precedence. Two-line fix in either report.tsx (drop `loading` prop, keep dynamic title) or AppButton (render title alongside spinner)."
+}

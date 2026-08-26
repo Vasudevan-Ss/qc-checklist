@@ -6,12 +6,14 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
 import logging
 import uuid
 import bcrypt
 import jwt
 import requests
 from pathlib import Path
+from pdf_report import build_daily_pdf, default_filename
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional, Any, Dict
 from datetime import datetime, timezone, timedelta
@@ -692,8 +694,7 @@ async def dashboard_stats(date: Optional[str] = None, user: dict = Depends(get_c
     }
 
 
-@api_router.get("/reports/daily")
-async def daily_report(date: Optional[str] = None, user: dict = Depends(get_current_user)):
+async def _build_daily_report(date: Optional[str], user: dict):
     if not date:
         date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     q: Dict[str, Any] = {"production_date": date}
@@ -750,8 +751,9 @@ async def daily_report(date: Optional[str] = None, user: dict = Depends(get_curr
             "inspection_id": d["id"],
         })
 
-    return {
+    report = {
         "header": {"company": "QC Inspect", "department": "Quality Control Department", "date": date},
+        "scope": "ALL INSPECTIONS" if user["role"] == "admin" else f"{user['name'].upper()} (OWN RECORDS)",
         "production_summary": {
             "products_inspected": len(products),
             "batches_inspected": len(batches),
@@ -764,6 +766,105 @@ async def daily_report(date: Optional[str] = None, user: dict = Depends(get_curr
         "prepared_by": user["name"],
         "generated_at": now_iso(),
     }
+    return report, docs
+
+
+@api_router.get("/reports/daily")
+async def daily_report(date: Optional[str] = None, user: dict = Depends(get_current_user)):
+    report, _ = await _build_daily_report(date, user)
+    return report
+
+
+@api_router.post("/reports/daily/pdf")
+async def daily_report_pdf(date: Optional[str] = None, user: dict = Depends(get_current_user)):
+    report, docs = await _build_daily_report(date, user)
+    report_date = report["header"]["date"]
+
+    # collect photo evidence referenced by checks / CCP readings
+    paths: List[str] = []
+    for d in docs:
+        for r in d.get("results", []) + d.get("ccp_readings", []):
+            p = r.get("photo_path")
+            if p and p not in paths:
+                paths.append(p)
+    photos: Dict[str, bytes] = {}
+    for p in paths[:60]:
+        try:
+            content, _ct = await run_in_threadpool(_get_object, p)
+            photos[p] = content
+        except Exception:
+            logger.warning("report photo missing: %s", p)
+
+    try:
+        pdf_bytes = await run_in_threadpool(build_daily_pdf, report, docs, photos)
+    except Exception as e:
+        logger.exception("pdf build failed")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+
+    filename = default_filename(report_date)
+    storage_path = f"{APP_NAME}/reports/{uuid.uuid4()}.pdf"
+    try:
+        result = await run_in_threadpool(_put_object, storage_path, pdf_bytes, "application/pdf")
+        storage_path = result.get("path", storage_path)
+    except Exception as e:
+        logger.exception("pdf upload failed")
+        raise HTTPException(status_code=502, detail=f"PDF upload failed: {e}")
+
+    token = uuid.uuid4().hex
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    await db.report_exports.insert_one({
+        "id": str(uuid.uuid4()),
+        "token": token,
+        "report_date": report_date,
+        "filename": filename,
+        "storage_path": storage_path,
+        "created_by": user["id"],
+        "created_by_name": user["name"],
+        "size_bytes": len(pdf_bytes),
+        "photo_count": len(photos),
+        "created_at": now_iso(),
+        "expires_at": expires_at,
+    })
+    await audit("export", "daily_report", token, user, after={"date": report_date})
+    return {
+        "token": token,
+        "filename": filename,
+        "share_path": f"/api/reports/shared/{token}",
+        "size_bytes": len(pdf_bytes),
+        "photo_count": len(photos),
+        "expires_at": expires_at,
+    }
+
+
+@api_router.get("/reports/shared/{token}")
+async def shared_report(token: str, download: int = 0):
+    rec = await db.report_exports.find_one({"token": token})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Report link not found")
+    if rec.get("expires_at") and rec["expires_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=410, detail="Report link has expired")
+    content = None
+    for attempt in range(4):
+        try:
+            content, _ct = await run_in_threadpool(_get_object, rec["storage_path"])
+            break
+        except Exception:
+            if attempt == 3:
+                raise HTTPException(status_code=404, detail="Report file not found")
+            await asyncio.sleep(1.5)
+    disp = "attachment" if download else "inline"
+    return Response(content=content, media_type="application/pdf",
+                    headers={"Content-Disposition": f'{disp}; filename="{rec["filename"]}"'})
+
+
+@api_router.get("/reports/exports")
+async def list_exports(date: Optional[str] = None, user: dict = Depends(get_current_user)):
+    q: Dict[str, Any] = {}
+    if date:
+        q["report_date"] = date
+    if user["role"] != "admin":
+        q["created_by"] = user["id"]
+    return await db.report_exports.find(q, {"_id": 0}).sort("created_at", -1).to_list(50)
 
 
 # ---------------------------------------------------------------------------

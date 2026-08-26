@@ -51,10 +51,18 @@ User agreed to build on this equivalent stack with the same feature set.
   build checklists (add/edit/delete parameters of all types), and manage CCPs (limits, frequency).
   RBAC enforced (qc→403). `include_inactive` listing for admins. Auto-creates checklist template v1.
 - Tested: 22/22 core backend pytest + 10/10 admin backend pytest + frontend e2e (incl. admin) passed.
+- **PDF export (2026-08-26):** `POST /api/reports/daily/pdf` builds an A4 audit-ready PDF (reportlab):
+  branded header, production/QC/CCP summary blocks, batch overview, per-inspection CCP monitoring table,
+  all parameter checks grouped by section, non-conformances + corrective actions, photo-evidence
+  thumbnails (fetched from object storage), and a 3-column sign-off block (Prepared/Verified/Approved).
+  PDF stored in Emergent Object Storage; `report_exports` collection holds a share token.
+  Public link `GET /api/reports/shared/{token}` (inline, `?download=1` for attachment, 30-day expiry).
+  `GET /api/reports/exports` lists past exports (RBAC scoped). Report screen: EXPORT PDF button →
+  card with filename, photo count, link, OPEN/DOWNLOAD + SHARE LINK. Tested 11/11 backend + frontend e2e.
 
 ## Prioritized Backlog
 ### P1
-- PDF / Excel-CSV export of reports.
+- Excel/CSV export of reports; historical (date-range) PDF export.
 - Offline-first capture + sync queue.
 - Corrective-action (NCR/CAPA) management screen with status transitions & verification.
 - Analytics dashboard (rejection rate, CCP failure frequency, defect trends).
@@ -63,6 +71,6 @@ User agreed to build on this equivalent stack with the same feature set.
   barcode/QR scan, manager approval workflow, email/report notifications.
 
 ## Next Tasks
-1. Build Admin Checklist Builder (product + checklist + CCP CRUD).
-2. Add PDF export + share for daily report.
-3. Add offline queue for inspections/readings.
+1. Add offline queue for inspections/readings.
+2. Excel/CSV export + date-range historical PDF.
+3. NCR/CAPA management screen.

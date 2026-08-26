@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -10,12 +11,15 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { api } from "@/src/api/client";
 import { colors, font, spacing, type } from "@/src/theme";
 import ScreenHeader from "@/src/components/ScreenHeader";
 import ResultBadge from "@/src/components/ResultBadge";
 import AppButton from "@/src/components/AppButton";
 import { useToast } from "@/src/context/Toast";
+
+const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/$/, "");
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -32,6 +36,8 @@ export default function Report() {
   const [date, setDate] = useState(todayStr());
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [pdf, setPdf] = useState<{ url: string; filename: string; photos: number } | null>(null);
 
   const load = useCallback(async (d: string) => {
     setLoading(true);
@@ -46,6 +52,7 @@ export default function Report() {
   }, []);
 
   useEffect(() => {
+    setPdf(null);
     load(date);
   }, [date, load]);
 
@@ -80,6 +87,42 @@ export default function Report() {
     }
   };
 
+  const openPdf = async (url: string) => {
+    if (Platform.OS === "web") {
+      window.open(url, "_blank");
+    } else {
+      await WebBrowser.openBrowserAsync(url);
+    }
+  };
+
+  const onExportPdf = async () => {
+    setExporting(true);
+    try {
+      const r = await api.post(`/reports/daily/pdf?date=${date}`);
+      const url = `${BACKEND}${r.share_path}`;
+      setPdf({ url, filename: r.filename, photos: r.photo_count });
+      toast.show("PDF sign-off sheet ready", "success");
+      await openPdf(url);
+    } catch (e: any) {
+      toast.show(e?.message || "Could not generate PDF", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const onSharePdfLink = async () => {
+    if (!pdf) return;
+    try {
+      await Share.share({
+        title: pdf.filename,
+        message: `Daily QC Report — ${date}\n${pdf.url}`,
+        url: pdf.url,
+      });
+    } catch {
+      toast.show("Could not share link", "error");
+    }
+  };
+
   const Stat = ({ label, value, color }: any) => (
     <View style={styles.statBox}>
       <Text style={[styles.statValue, color && { color }]}>{value}</Text>
@@ -92,9 +135,18 @@ export default function Report() {
       <ScreenHeader
         title="Daily QC Report"
         right={
-          <Pressable testID="share-report-button" onPress={onShare} hitSlop={10}>
-            <Ionicons name="share-outline" size={22} color={colors.onSurface} />
-          </Pressable>
+          <View style={{ flexDirection: "row", gap: spacing.md }}>
+            <Pressable testID="export-pdf-icon" onPress={onExportPdf} hitSlop={10} disabled={exporting}>
+              <Ionicons
+                name="document-text-outline"
+                size={22}
+                color={exporting ? colors.muted : colors.onSurface}
+              />
+            </Pressable>
+            <Pressable testID="share-report-button" onPress={onShare} hitSlop={10}>
+              <Ionicons name="share-outline" size={22} color={colors.onSurface} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -178,8 +230,34 @@ export default function Report() {
             </>
           )}
 
-          <View style={{ marginTop: spacing.xl }}>
-            <AppButton testID="share-report-cta" title="SHARE REPORT" onPress={onShare} variant="secondary" />
+          <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
+            <AppButton
+              testID="export-pdf-button"
+              title={exporting ? "GENERATING PDF…" : "EXPORT PDF SIGN-OFF SHEET"}
+              onPress={onExportPdf}
+              disabled={exporting}
+            />
+            {pdf && (
+              <View testID="pdf-ready-card" style={styles.pdfCard}>
+                <View style={styles.pdfHead}>
+                  <Ionicons name="document-text-outline" size={18} color={colors.onSurface} />
+                  <Text style={styles.pdfName} numberOfLines={1}>{pdf.filename}</Text>
+                </View>
+                <Text style={styles.pdfMeta}>
+                  All CCPs, parameter checks and {pdf.photos} photo{pdf.photos === 1 ? "" : "s"} included · link valid 30 days
+                </Text>
+                <Text style={styles.pdfLink} numberOfLines={2}>{pdf.url}</Text>
+                <View style={styles.pdfActions}>
+                  <View style={{ flex: 1 }}>
+                    <AppButton testID="open-pdf-button" title="OPEN / DOWNLOAD" onPress={() => openPdf(pdf.url)} variant="secondary" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <AppButton testID="share-pdf-link-button" title="SHARE LINK" onPress={onSharePdfLink} variant="secondary" />
+                  </View>
+                </View>
+              </View>
+            )}
+            <AppButton testID="share-report-cta" title="SHARE TEXT SUMMARY" onPress={onShare} variant="outline" />
           </View>
           <Text style={styles.prepared}>Prepared by {report.prepared_by}</Text>
         </ScrollView>
@@ -226,4 +304,10 @@ const styles = StyleSheet.create({
   ncStatus: { alignSelf: "flex-start", backgroundColor: colors.warning, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 },
   ncStatusText: { fontFamily: font.mono, fontSize: type.sm, color: "#fff", letterSpacing: 1 },
   prepared: { fontFamily: font.mono, fontSize: type.sm, color: colors.muted, textAlign: "center", marginTop: spacing.md },
+  pdfCard: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, gap: spacing.xs },
+  pdfHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  pdfName: { flex: 1, fontFamily: font.display, fontSize: type.base, color: colors.onSurface },
+  pdfMeta: { fontFamily: font.mono, fontSize: type.sm, color: colors.muted },
+  pdfLink: { fontFamily: font.mono, fontSize: 10, color: colors.brand },
+  pdfActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
 });
