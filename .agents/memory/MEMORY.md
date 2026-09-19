@@ -1,0 +1,2 @@
+- [MongoDB Atlas runtime checks](mongodb-runtime-check.md) — verify SRV DNS, TCP, and TLS outside FastAPI when startup fails before authentication.
+- [Post-merge dependency quirk](post-merge-dependency-quirk.md) — filter the unavailable emergentintegrations package during automated setup.
